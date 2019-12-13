@@ -3,7 +3,7 @@ import Foundation
 public struct KVHashEncoder {
 
     /// Transform an `Encodable` value into a key-value hash (aka a dictionary).
-    static func encode<T: Encodable>(_ input: T) throws -> [String: Any] {
+    public static func encode<T: Encodable>(_ input: T) throws -> [String: Any] {
         let encoder = _KVHashEncoder(codingPath: [], userInfo: [:])
         
         try input.encode(to: encoder)

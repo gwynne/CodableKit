@@ -5,7 +5,7 @@ public struct KVHashDecoder {
     /// Decode an arbitrary key-value hash to a given type. If the type's
     /// structure does not match that of the input, errors and hilarity are
     /// liable to result.
-    static func decode<T: Decodable>(_ type: T.Type = T.self, from input: [String: Any]) throws -> T {
+    public static func decode<T: Decodable>(_ type: T.Type = T.self, from input: [String: Any]) throws -> T {
         return try T.init(from: _KVHashDecoder(storage: input))
     }
 
