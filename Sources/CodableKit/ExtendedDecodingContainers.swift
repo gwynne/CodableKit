@@ -152,7 +152,7 @@ extension ExtendedKeyedDecodingContainer {
     /// For arbitrary types, invoke a subdecoder by default.
     public func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
         return try T.init(from:
-            self.subdecoder(forValue: try self.requireValue(forKey: key, ofType: T.self), codingPath: self.codingPath + [key]))
+            self.subdecoder(forValue: try self.requireValue(forKey: key, ofType: Any.self), codingPath: self.codingPath + [key]))
     }
 
     /// Temporarily disabled due to https://bugs.swift.org/browse/SR-11913
@@ -222,7 +222,7 @@ extension ExtendedUnkeyedDecodingContainer {
     /// For arbitrary types, invoke a subdecoder by default.
     public func decode<T: Decodable>(_ type: T.Type) throws -> T {
         return try self.advanceIndex(after: T.init(from:
-            self.subdecoder(forValue: self.requireNextValue(ofType: T.self), codingPath: self.nextCodingPath)))
+            self.subdecoder(forValue: self.requireNextValue(ofType: Any.self), codingPath: self.nextCodingPath)))
     }
 
     /// Convenience overload of `superDecoder()`.
