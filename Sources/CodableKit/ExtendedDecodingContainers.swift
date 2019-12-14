@@ -33,28 +33,6 @@ public protocol ExtendedDecodingContainer {
 
 }
 
-extension ExtendedDecodingContainer {
-
-    public func checkIsNil<T>(value: T?) throws -> Bool {
-        if let presentValue = value {
-            // Value is non-absent. Is it still Optional?
-            if let optionalValue = presentValue as? AnyOptionalType {
-                // TODO: Does this actually work as intended?
-                return !optionalValue.hasValue
-            } else {
-                // By default, `NSNull` is considered `nil`.
-                return presentValue is NSNull
-            }
-        } else {
-            // Absent values are `nil` by default. In particular, they are
-            // treated as `nil` rather than raising `keyNotFound` or
-            // `valueNotFound` errors.
-            return true
-        }
-    }
-
-}
-
 /// Provides default implementations and utility methods for building keyed
 /// decoding containers.
 ///
@@ -128,6 +106,28 @@ public protocol ExtendedSingleValueDecodingContainer: ExtendedDecodingContainer,
     /// Returns the container's value, converted to the given type.
     /// Throws an error if the conversion fails.
     func requireValue<T>(ofType: T.Type) throws -> T
+
+}
+
+extension ExtendedDecodingContainer {
+
+    public func checkIsNil<T>(value: T?) throws -> Bool {
+        if let presentValue = value {
+            // Value is non-absent. Is it still Optional?
+            if let optionalValue = presentValue as? AnyOptionalType {
+                // TODO: Does this actually work as intended?
+                return !optionalValue.hasValue
+            } else {
+                // By default, `NSNull` is considered `nil`.
+                return presentValue is NSNull
+            }
+        } else {
+            // Absent values are `nil` by default. In particular, they are
+            // treated as `nil` rather than raising `keyNotFound` or
+            // `valueNotFound` errors.
+            return true
+        }
+    }
 
 }
 
