@@ -22,7 +22,7 @@ extension ReferenceWrappedDictionary: Flattenable {
     /// A dictionary's flattened value is the unwrapped value type with all
     /// nested values recursively flattened.
     fileprivate var flattenedValue: Any {
-        self.unwrappedDictionary.mapValues { ($0 as? Flattenable)?.flattenedValue ?? $0 }
+        self.unwrappedDictionary.compactMapValues { $0 is Flattenable ? ($0 as! Flattenable).flattenedValue : $0 }
     }
 }
 
@@ -30,7 +30,7 @@ extension ReferenceWrappedArray: Flattenable {
     /// An array's flattened value is the unwrapped value type with all nested
     /// values recursively flattened.
     fileprivate var flattenedValue: Any {
-        self.unwrappedArray.map { ($0 as? Flattenable)?.flattenedValue ?? $0 }
+        self.unwrappedArray.compactMap { $0 is Flattenable ? ($0 as! Flattenable).flattenedValue : $0 }
     }
 }
 
@@ -65,11 +65,12 @@ fileprivate class _KVHashEncoder: Encoder, Flattenable {
     fileprivate var flattenedValue: Any {
         switch self.storage {
             case .uninitialized:
-                fatalError("Encoder should not be finalized unless something has been encoded into it.")
+                //fatalError("Encoder should not be finalized unless something has been encoded into it.")
+                return Void?.none as Any
             case .keyed(let dict):
-                return dict.flattenedValue
+                return dict.flattenedValue as Any
             case .unkeyed(let arr):
-                return arr.flattenedValue
+                return arr.flattenedValue as Any
             case .singleValue(let value):
                 return (value as? Flattenable)?.flattenedValue ?? value
         }
@@ -136,6 +137,10 @@ fileprivate class _KVHashEncodingContainerBase<StorageRefType>: ExtendedEncoding
     
     /// The coding path of this container's value. May differ from the encoder's.
     let codingPath: [CodingKey]
+    
+    static var nilRepresentation: Any {
+        return NSNull()
+    }
     
     /// See `ExtendedEncodingContainer.subencoder(codingPath:)`
     fileprivate func subencoder(codingPath: [CodingKey]) throws -> Encoder {
