@@ -30,7 +30,14 @@ public protocol ExtendedDecodingContainer {
     /// `superDecoder()` and variants to support decoding of existentials, in
     /// which case `value` will generally be `nil`.
     func subdecoder(forValue value: Any?, codingPath: [CodingKey]) throws -> Decoder
-
+    
+    /// Call when a `decode<T>()` method has no special handling for the given
+    /// `T`. The value will be passed along to a subdecoder.
+    func passthrough<T: Decodable>(_ value: Any, forKey key: CodingKey?) throws -> T
+    
+    /// A redeclaration of the `codingPath` provided by all the various
+    /// coding containers so it can be accessed more generically.
+    var codingPath: [CodingKey] { get }
 }
 
 /// Provides default implementations and utility methods for building keyed
@@ -128,6 +135,10 @@ extension ExtendedDecodingContainer {
             return true
         }
     }
+    
+    public func passthrough<T: Decodable>(_ value: Any, forKey key: CodingKey?) throws -> T {
+        return try T.init(from: self.subdecoder(forValue: value, codingPath: self.codingPath + [key].compactMap { $0 }))
+    }
 
 }
 
@@ -151,8 +162,7 @@ extension ExtendedKeyedDecodingContainer {
 
     /// For arbitrary types, invoke a subdecoder by default.
     public func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
-        return try T.init(from:
-            self.subdecoder(forValue: try self.requireValue(forKey: key, ofType: Any.self), codingPath: self.codingPath + [key]))
+        return try self.passthrough(try self.requireValue(forKey: key, ofType: Any.self), forKey: key)
     }
 
     /// Temporarily disabled due to https://bugs.swift.org/browse/SR-11913
@@ -221,8 +231,7 @@ extension ExtendedUnkeyedDecodingContainer {
 
     /// For arbitrary types, invoke a subdecoder by default.
     public func decode<T: Decodable>(_ type: T.Type) throws -> T {
-        return try self.advanceIndex(after: T.init(from:
-            self.subdecoder(forValue: self.requireNextValue(ofType: Any.self), codingPath: self.nextCodingPath)))
+        return try self.advanceIndex(after: self.passthrough(self.requireNextValue(ofType: Any.self), forKey: self.currentKey))
     }
 
     /// Convenience overload of `superDecoder()`.
@@ -272,7 +281,7 @@ extension ExtendedSingleValueDecodingContainer {
     
     /// For arbitrary types, invoke a subdecoder by default.
     public func decode<T: Decodable>(_ type: T.Type) throws -> T {
-        return try T.init(from: self.subdecoder(forValue: self.value, codingPath: self.codingPath))
+        return try self.passthrough(self.value, forKey: nil)
     }
 
     /// Convenience implementations of decoding all fundamental types via
