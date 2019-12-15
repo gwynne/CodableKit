@@ -26,7 +26,7 @@ extension DecodingError {
     /// path components. If a path component has no string value, the integer
     /// value, if any, is used. If that also doesn't exist, falls back on the
     /// dynamic type of the key as a last-ditch effort.
-    private static func describe(_ codingPath: [CodingKey]) -> String {
+    internal static func describe(_ codingPath: [CodingKey]) -> String {
         return codingPath.map {
             (!$0.stringValue.isEmpty ? $0.stringValue : nil) ??
             $0.intValue.map { "\($0)" } ??
@@ -35,7 +35,7 @@ extension DecodingError {
     }
     
     /// Generate a prettier string for an unkeyed container's count than "Optional(8)"
-    private static func describe(sizeOf container: UnkeyedDecodingContainer) -> String {
+    internal static func describe(sizeOf container: UnkeyedDecodingContainer) -> String {
         return container.count?.description ?? "<unknown>"
     }
     
