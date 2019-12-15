@@ -123,7 +123,22 @@ fileprivate final class _KVHashKeyedDecodingContainer<Key: CodingKey>:
     subscript(forKey key: Key) -> Any? {
         value[key.stringValue] as Any?
     }
-    
+
+    /// Explicitly override decoding for `URL` to decode from simple `String`.
+    /// This matches the behavior of `JSONDecoder`.
+    public func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
+        if T.self is URL.Type {
+            let rawValue = try self.requireValue(forKey: key, ofType: String.self)
+            
+            guard let url = URL(string: rawValue) else {
+                throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "Failed to create URL from string \(rawValue)")
+            }
+            return url as! T
+        } else {
+            return try self.passthrough(self.requireValue(forKey: key, ofType: Any.self), forKey: key)
+        }
+    }
+
 }
 
 /// The unkeyed decoding container for `_KVHashDecoder`
@@ -162,6 +177,21 @@ fileprivate final class _KVHashUnkeyedDecodingContainer:
         self.currentIndex += 1
     }
 
+    /// Explicitly override decoding for `URL` to decode from simple `String`.
+    /// This matches the behavior of `JSONDecoder`.
+    public func decode<T: Decodable>(_ type: T.Type) throws -> T {
+        if T.self is URL.Type {
+            let rawValue = try self.requireNextValue(ofType: String.self)
+            
+            guard let url = URL(string: rawValue) else {
+                throw DecodingError.dataCorruptedError(in: self, debugDescription: "Failed to create URL from string \(rawValue)")
+            }
+            return self.advanceIndex(after: url) as! T
+        } else {
+            return try self.advanceIndex(after: self.passthrough(self.requireNextValue(ofType: Any.self), forKey: self.currentKey))
+        }
+    }
+
 }
 
 /// The single=value decoding container for `_KVHashDecoder`
@@ -172,4 +202,19 @@ fileprivate final class _KVHashSingleValueDecodingContainer:
     /// Nothing to implement, the base class and extended container handled
     /// everything this particular decoder cares about.
     
+    /// Explicitly override decoding for `URL` to decode from simple `String`.
+    /// This matches the behavior of `JSONDecoder`.
+    public func decode<T: Decodable>(_ type: T.Type) throws -> T {
+        if T.self is URL.Type {
+            let rawValue = try self.requireValue(ofType: String.self)
+            
+            guard let url = URL(string: rawValue) else {
+                throw DecodingError.dataCorruptedError(in: self, debugDescription: "Failed to create URL from string \(rawValue)")
+            }
+            return url as! T
+        } else {
+            return try self.passthrough(self.value, forKey: nil)
+        }
+    }
+
 }
