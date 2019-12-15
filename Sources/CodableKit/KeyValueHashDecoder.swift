@@ -72,7 +72,7 @@ fileprivate class _KVHashDecodingContainerBase<StorageType>: ExtendedDecodingCon
     let codingPath: [CodingKey]
 
     /// See `ExtendedDecodingContainer.subdecoder(forValue:codingPath:)`
-    func subdecoder(forValue value: Any?, codingPath: [CodingKey]) throws -> Decoder {
+    func subdecoder(forValue value: Any, codingPath: [CodingKey]) throws -> Decoder {
         return _KVHashDecoder(codingPath: codingPath, storage: value as Any, userInfo: self.decoder.userInfo)
     }
     

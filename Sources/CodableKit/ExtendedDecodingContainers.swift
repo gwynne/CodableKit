@@ -29,7 +29,7 @@ public protocol ExtendedDecodingContainer {
     /// given type `T: Decodable`. May also be used to implement
     /// `superDecoder()` and variants to support decoding of existentials, in
     /// which case `value` will generally be `nil`.
-    func subdecoder(forValue value: Any?, codingPath: [CodingKey]) throws -> Decoder
+    func subdecoder(forValue value: Any, codingPath: [CodingKey]) throws -> Decoder
     
     /// Call when a `decode<T>()` method has no special handling for the given
     /// `T`. The value will be passed along to a subdecoder.
@@ -236,7 +236,7 @@ extension ExtendedUnkeyedDecodingContainer {
 
     /// Convenience overload of `superDecoder()`.
     public func superDecoder() throws -> Decoder {
-        return try self.subdecoder(forValue: nil, codingPath: self.nextCodingPath) // Do not advance index
+        return try self.subdecoder(forValue: self.currentValue, codingPath: self.nextCodingPath) // Do not advance index
     }
     
     /// Convenience implementations of decoding all fundamental types via
