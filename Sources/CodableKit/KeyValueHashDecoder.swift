@@ -82,6 +82,57 @@ fileprivate class _KVHashDecodingContainerBase<StorageType>: ExtendedDecodingCon
         self.value = value
         self.codingPath = codingPath
     }
+    
+    /// General unboxing logic; this handles knowing which things we want to
+    /// handle in an atypical manner across all container types while allowing
+    /// each type to provide the correct inputs and failure modes. Calls the
+    /// appropriate `self.passthrough()`.
+    func unbox<T: Decodable>(
+        _ valueClosure: @autoclosure () throws -> Any,
+        forKey key: CodingKey?,
+        typeError: (Any) -> DecodingError,
+        corruptError: (String) -> DecodingError
+    ) throws -> T {
+        let rawValue = try valueClosure()
+        
+        if T.self is URL.Type {
+            guard let value = rawValue as? String else { throw typeError(rawValue) }
+            return try self.decodeURL(from: value, failingWith: corruptError) as! T
+        //} else if T.self is Date.Type {
+        //    guard let value = rawValue as? String else { throw typeError(rawValue) }
+        //    return try self.decodeDate(from: value, failingWith: corruptError) as! T
+        } else if T.self is Decimal.Type {
+            guard let value = rawValue as? String else { throw typeError(rawValue) }
+            return try self.decodeDecimal(from: value, failingWith: corruptError) as! T
+        } else {
+            return try self.passthrough(rawValue, forKey: key)
+        }
+    }
+    
+    /// Special handling for `URL`
+    func decodeURL(from value: String, failingWith errorClosure: (String) -> DecodingError) throws -> URL {
+        guard let url = URL(string: value) else {
+            throw errorClosure("Failed to create URL from string \"\(value)\"")
+        }
+        return url
+    }
+    
+    /// Special handling for `Date`
+    func decodeDate(from value: String, failingWith errorClosure: (String) -> DecodingError) throws -> Date {
+        let adjustedValue = value.replacingOccurrences(of: "Z", with: ".000000Z", options: [.anchored, .backwards])
+        guard let date = isoDateFormatter.date(from: value) else {
+            throw errorClosure("Failed to interpret raw string \"value\" as an ISO8601 date.")
+        }
+        return date
+    }
+    
+    /// Special handling for `Decimal`
+    func decodeDecimal(from value: String, failingWith errorClosure: (String) -> DecodingError) throws -> Decimal {
+        guard let decimal = Decimal(string: value) else {
+            throw errorClosure("Failed to interpret raw string \"value\" as a Decimal.")
+        }
+        return decimal
+    }
 
 }
 
@@ -124,19 +175,14 @@ fileprivate final class _KVHashKeyedDecodingContainer<Key: CodingKey>:
         value[key.stringValue] as Any?
     }
 
-    /// Explicitly override decoding for `URL` to decode from simple `String`.
-    /// This matches the behavior of `JSONDecoder`.
+    /// Use our unboxing function to get various custom behaviors.
     public func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
-        if T.self is URL.Type {
-            let rawValue = try self.requireValue(forKey: key, ofType: String.self)
-            
-            guard let url = URL(string: rawValue) else {
-                throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "Failed to create URL from string \(rawValue)")
-            }
-            return url as! T
-        } else {
-            return try self.passthrough(self.requireValue(forKey: key, ofType: Any.self), forKey: key)
-        }
+        return try self.unbox(
+            self.requireValue(forKey: key),
+            forKey: key,
+            typeError: { .typeMismatchError(T.self, found: $0, at: self.codingPath + [key]) },
+            corruptError: { .dataCorruptedError(forKey: key, in: self, debugDescription: $0) }
+        )
     }
 
 }
@@ -154,16 +200,14 @@ fileprivate final class _KVHashUnkeyedDecodingContainer:
     /// See `UnkeyedDecodingContainer.nestedContainer(keyedBy:)`
     public func nestedContainer<NestedKey: CodingKey>(keyedBy type: NestedKey.Type) throws -> KeyedDecodingContainer<NestedKey> {
         return try self.advanceIndex(after:
-            self.subdecoder(forValue: self.requireNextValue(), codingPath: self.codingPath + [self.currentKey])
-                .container(keyedBy: NestedKey.self)
+            self.subdecoder(forValue: self.requireNextValue(), codingPath: self.nextCodingPath).container(keyedBy: NestedKey.self)
         )
     }
 
     /// See `UnkeyedDecodingContainer.nestedUnkeyedContainer()`
     public func nestedUnkeyedContainer() throws -> UnkeyedDecodingContainer {
         return try self.advanceIndex(after:
-            self.subdecoder(forValue: self.requireNextValue(), codingPath: self.codingPath + [self.currentKey])
-                .unkeyedContainer()
+            self.subdecoder(forValue: self.requireNextValue(), codingPath: self.nextCodingPath).unkeyedContainer()
         )
     }
     
@@ -177,19 +221,14 @@ fileprivate final class _KVHashUnkeyedDecodingContainer:
         self.currentIndex += 1
     }
 
-    /// Explicitly override decoding for `URL` to decode from simple `String`.
-    /// This matches the behavior of `JSONDecoder`.
+    /// Use our unboxing function to get various custom behaviors.
     public func decode<T: Decodable>(_ type: T.Type) throws -> T {
-        if T.self is URL.Type {
-            let rawValue = try self.requireNextValue(ofType: String.self)
-            
-            guard let url = URL(string: rawValue) else {
-                throw DecodingError.dataCorruptedError(in: self, debugDescription: "Failed to create URL from string \(rawValue)")
-            }
-            return self.advanceIndex(after: url) as! T
-        } else {
-            return try self.advanceIndex(after: self.passthrough(self.requireNextValue(ofType: Any.self), forKey: self.currentKey))
-        }
+        return try self.advanceIndex(after: self.unbox(
+            self.requireNextValue(),
+            forKey: self.currentKey,
+            typeError: { .typeMismatchError(T.self, found: $0, at: self.nextCodingPath) },
+            corruptError: { .dataCorruptedError(in: self, debugDescription: $0) }
+        ))
     }
 
 }
@@ -198,23 +237,14 @@ fileprivate final class _KVHashUnkeyedDecodingContainer:
 fileprivate final class _KVHashSingleValueDecodingContainer:
     _KVHashDecodingContainerBase<Any>, ExtendedSingleValueDecodingContainer
 {
-    
-    /// Nothing to implement, the base class and extended container handled
-    /// everything this particular decoder cares about.
-    
-    /// Explicitly override decoding for `URL` to decode from simple `String`.
-    /// This matches the behavior of `JSONDecoder`.
+    /// Use our unboxing function to get various custom behaviors.
     public func decode<T: Decodable>(_ type: T.Type) throws -> T {
-        if T.self is URL.Type {
-            let rawValue = try self.requireValue(ofType: String.self)
-            
-            guard let url = URL(string: rawValue) else {
-                throw DecodingError.dataCorruptedError(in: self, debugDescription: "Failed to create URL from string \(rawValue)")
-            }
-            return url as! T
-        } else {
-            return try self.passthrough(self.value, forKey: nil)
-        }
+        return try self.unbox(
+            self.value,
+            forKey: nil,
+            typeError: { .typeMismatchError(T.self, found: $0, at: self.codingPath) },
+            corruptError: { .dataCorruptedError(in: self, debugDescription: $0) }
+        )
     }
 
 }

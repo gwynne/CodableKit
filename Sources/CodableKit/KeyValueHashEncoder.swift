@@ -172,7 +172,21 @@ fileprivate class _KVHashEncodingContainerBase<StorageRefType>: ExtendedEncoding
     ) -> UnkeyedEncodingContainer {
         return _KVHashUnkeyedEncodingContainer(encoder: self.encoder, storageRef: storageRef, codingPath: codingPath)
     }
-
+    
+    /// Provide custom behaviors for various types in a way that's generic
+    /// between the various container types.
+    fileprivate func box<T: Encodable>(_ value: T, setter: (Any) throws -> Void, forKey key: CodingKey?) throws {
+        if let url = value as? URL {
+            try setter(url.absoluteString)
+        //} else if let date = value as? Date {
+        //    try setter(isoDateFormatter.string(from: date))
+        } else if let decimal = value as? Decimal {
+            try setter(decimal.description)
+        } else {
+            try self.passthrough(value, setter: setter, forKey: key)
+        }
+    }
+    
 }
 
 /// The keyed encoding container for `_KVHashEncoder`
@@ -206,14 +220,9 @@ fileprivate final class _KVHashKeyedEncodingContainer<Key: CodingKey>:
         self.storageRef[key.stringValue] = value
     }
     
-    /// Explicitly override encoding for `URL` to encode as simple `String`.
-    /// This matches the behavior of `JSONEncoder`.
+    /// Forward all `Encodable`s to the boxing function.
     public func encode<T: Encodable>(_ value: T, forKey key: Key) throws {
-        if let url = value as? URL {
-            try self.encode(url.absoluteString, forKey: key)
-        } else {
-            try self.passthrough(value, forKey: key)
-        }
+        try self.box(value, setter: { try self.set(value: $0, forKey: key) }, forKey: key)
     }
 
 }
@@ -244,14 +253,9 @@ fileprivate final class _KVHashUnkeyedEncodingContainer:
         self.storageRef.append(value)
     }
 
-    /// Explicitly override encoding for `URL` to encode as simple `String`.
-    /// This matches the behavior of `JSONEncoder`.
+    /// Forward all `Encodable`s to the boxing function.
     public func encode<T: Encodable>(_ value: T) throws {
-        if let url = value as? URL {
-            try self.encode(url.absoluteString)
-        } else {
-            try self.passthrough(value, forKey: self.currentCodingKey)
-        }
+        try self.box(value, setter: { try self.append($0) }, forKey: self.currentCodingKey)
     }
 }
 
@@ -264,15 +268,8 @@ fileprivate final class _KVHashSingleValueEncodingContainer:
         self.storageRef(value)
     }
     
-    /// No further implementation is required.
-    
-    /// Explicitly override encoding for `URL` to encode as simple `String`.
-    /// This matches the behavior of `JSONEncoder`.
+    /// Forward all `Encodable`s to the boxing function.
     public func encode<T: Encodable>(_ value: T) throws {
-        if let url = value as? URL {
-            try self.encode(url.absoluteString)
-        } else {
-            try self.passthrough(value, forKey: nil)
-        }
+        try self.box(value, setter: { try self.set(value: $0) }, forKey: nil)
     }
 }
