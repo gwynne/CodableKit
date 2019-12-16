@@ -181,7 +181,7 @@ fileprivate class _KVHashEncodingContainerBase<StorageRefType>: ExtendedEncoding
         //} else if let date = value as? Date {
         //    try setter(isoDateFormatter.string(from: date))
         } else if let decimal = value as? Decimal {
-            try setter(decimal.description)
+            try setter(decimal)
         } else {
             try self.passthrough(value, setter: setter, forKey: key)
         }

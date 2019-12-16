@@ -102,8 +102,7 @@ fileprivate class _KVHashDecodingContainerBase<StorageType>: ExtendedDecodingCon
         //    guard let value = rawValue as? String else { throw typeError(rawValue) }
         //    return try self.decodeDate(from: value, failingWith: corruptError) as! T
         } else if T.self is Decimal.Type {
-            guard let value = rawValue as? String else { throw typeError(rawValue) }
-            return try self.decodeDecimal(from: value, failingWith: corruptError) as! T
+            return try self.decodeDecimal(from: rawValue, failingWith: typeError) as! T
         } else {
             return try self.passthrough(rawValue, forKey: key)
         }
@@ -120,18 +119,24 @@ fileprivate class _KVHashDecodingContainerBase<StorageType>: ExtendedDecodingCon
     /// Special handling for `Date`
     func decodeDate(from value: String, failingWith errorClosure: (String) -> DecodingError) throws -> Date {
         let adjustedValue = value.replacingOccurrences(of: "Z", with: ".000000Z", options: [.anchored, .backwards])
-        guard let date = isoDateFormatter.date(from: value) else {
+        guard let date = isoDateFormatter.date(from: adjustedValue) else {
             throw errorClosure("Failed to interpret raw string \"value\" as an ISO8601 date.")
         }
         return date
     }
     
     /// Special handling for `Decimal`
-    func decodeDecimal(from value: String, failingWith errorClosure: (String) -> DecodingError) throws -> Decimal {
-        guard let decimal = Decimal(string: value) else {
-            throw errorClosure("Failed to interpret raw string \"value\" as a Decimal.")
+    func decodeDecimal(
+        from value: Any,
+        failingWith errorClosure: (Any) -> DecodingError
+    ) throws -> Decimal {
+        if let decimal = value as? Decimal {
+            return decimal
+        } else if let double = value as? Double {
+            return Decimal(double)
+        } else {
+            throw errorClosure(value)
         }
-        return decimal
     }
 
 }
