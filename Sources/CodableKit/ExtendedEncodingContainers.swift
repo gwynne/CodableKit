@@ -13,8 +13,11 @@ public protocol ExtendedEncodingContainer {
     static var nilRepresentation: Any { get }
     
     /// Call when an `encode<T>()` method has no special handling for the given
-    /// `T`. The value will be passed along to a subencoder.
-    func passthrough<T: Encodable>(_ value: T, forKey key: CodingKey?) throws
+    /// `T`. The value will be passed along to a subencoder. The `setter`
+    /// closure must use the provided subencoder to record the resulting encoded
+    /// value in the container. This allows the various containers to share one
+    /// implementation.
+    func passthrough<T: Encodable>(_ value: T, setter: (Encoder) throws -> Void, forKey key: CodingKey?) throws
 
     /// A redeclaration of the `codingPath` provided by all the various
     /// coding containers so it can be accessed more generically.
@@ -57,8 +60,10 @@ extension ExtendedEncodingContainer {
 
     public static var nilRepresentation: Any { Optional<Void>.none as Any }
 
-    public func passthrough<T: Encodable>(_ value: T, forKey key: CodingKey?) throws {
-        fatalError("This should have been overridden.")
+    public func passthrough<T: Encodable>(_ value: T, setter: (Encoder) throws -> Void, forKey key: CodingKey?) throws {
+        let subencoder = try! self.subencoder(codingPath: self.codingPath + [key].compactMap { $0 })
+        try value.encode(to: subencoder)
+        try setter(subencoder)
     }
 }
 
@@ -80,7 +85,7 @@ extension ExtendedKeyedEncodingContainer {
     public func encode(_ value: UInt32, forKey key: Key) throws { try self.set(value: value, forKey: key) }
     public func encode(_ value: UInt64, forKey key: Key) throws { try self.set(value: value, forKey: key) }
     public func encode<T: Encodable>(_ value: T, forKey key: Key) throws {
-        try self.passthrough(value, forKey: key)
+        try self.passthrough(value, setter: { try self.set(value: $0, forKey: key) }, forKey: key)
     }
 
     /// Temporarily disabled due to https://bugs.swift.org/browse/SR-11913
@@ -94,12 +99,6 @@ extension ExtendedKeyedEncodingContainer {
         return subencoder
     }
     
-    public func passthrough<T: Encodable>(_ value: T, forKey key: CodingKey?) throws {
-        let subencoder = try! self.subencoder(codingPath: self.codingPath + [key].compactMap { $0 })
-        try value.encode(to: subencoder)
-        try! self.set(value: subencoder, forKey: key as! Key)
-    }
-
 }
 
 extension ExtendedUnkeyedEncodingContainer {
@@ -120,7 +119,7 @@ extension ExtendedUnkeyedEncodingContainer {
     public func encode(_ value: UInt32) throws { try self.append(value) }
     public func encode(_ value: UInt64) throws { try self.append(value) }
     public func encode<T: Encodable>(_ value: T) throws {
-        try self.passthrough(value, forKey: self.currentCodingKey)
+        try self.passthrough(value, setter: { try self.append($0) }, forKey: self.currentCodingKey)
     }
 
     public func superEncoder() -> Encoder {
@@ -129,12 +128,6 @@ extension ExtendedUnkeyedEncodingContainer {
         return subencoder
     }
     
-    public func passthrough<T: Encodable>(_ value: T, forKey key: CodingKey?) throws {
-        let subencoder = try! self.subencoder(codingPath: self.codingPath + [key].compactMap { $0 })
-        try value.encode(to: subencoder)
-        try! self.append(subencoder)
-    }
-
     public var currentCodingKey: CodingKey { GenericCodingKey(intValue: self.count)! }
 
 }
@@ -157,14 +150,7 @@ extension ExtendedSingleValueEncodingContainer {
     public func encode(_ value: UInt32) throws { try self.set(value: value) }
     public func encode(_ value: UInt64) throws { try self.set(value: value) }
     public func encode<T: Encodable>(_ value: T) throws {
-        try self.passthrough(value, forKey: nil)
-    }
-    
-    public func passthrough<T>(_ value: T, forKey key: CodingKey?) throws where T : Encodable {
-        assert(key == nil)
-        let subencoder = try self.subencoder(codingPath: self.codingPath)
-        try value.encode(to: subencoder)
-        try self.set(value: subencoder)
+        try self.passthrough(value, setter: { try self.set(value: $0) }, forKey: nil)
     }
 
 }
